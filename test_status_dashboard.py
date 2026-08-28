@@ -194,4 +194,68 @@ with mock.patch.object(dash.subprocess, "run", side_effect=fake_run_active):
 assert b"Retention is disabled" in resp.data
 print("PASS: retention shown as disabled when both settings are 0 (the default)")
 
+# --- Test 12: /api/status returns correct, complete JSON ---
+with open(os.environ["HEARTBEAT_FILE"], "w") as f:
+    f.write(str(time.time()))
+
+with mock.patch.object(dash.subprocess, "run", side_effect=fake_run_active):
+    resp = client.get("/api/status")
+assert resp.status_code == 200
+assert resp.content_type == "application/json"
+data = resp.get_json()
+
+assert data["state"] == "ok"
+assert isinstance(data["heartbeat_age_seconds"], (int, float))
+assert data["uploaded"] == 2  # e1 and e4 both have uploaded=1 (e4 was later retention-deleted)
+assert data["pending"] == 1  # e2
+assert data["given_up"] == 1  # e3
+assert data["retained"] == 1  # only e1 (uploaded=1 AND drive_deleted=0)
+assert data["retention_deleted"] == 1  # only e4 (uploaded=1 AND drive_deleted=1)
+assert data["bytes_stored"] == 5_000_000  # only e1's size (e4 excluded, drive_deleted=1)
+assert abs(data["gb_stored"] - round(5_000_000 / (1024**3), 3)) < 0.0001
+assert "timestamp" in data
+print("PASS: /api/status returns correct, complete JSON with accurate counts")
+
+# --- Test 13: /api/status reflects retention config correctly ---
+dash.DRIVE_RETENTION_MAX_AGE_DAYS = 90
+dash.DRIVE_RETENTION_MAX_SIZE_GB = 100
+dash.DRIVE_RETENTION_DRY_RUN = True
+with mock.patch.object(dash.subprocess, "run", side_effect=fake_run_active):
+    resp = client.get("/api/status")
+data = resp.get_json()
+assert data["retention_enabled"] is True
+assert data["retention_max_age_days"] == 90
+assert data["retention_max_size_gb"] == 100
+assert data["retention_dry_run"] is True
+print("PASS: /api/status correctly reflects retention configuration")
+
+dash.DRIVE_RETENTION_MAX_AGE_DAYS = 0
+dash.DRIVE_RETENTION_MAX_SIZE_GB = 0
+dash.DRIVE_RETENTION_DRY_RUN = False
+
+# --- Test 14: /api/status respects Basic Auth just like the HTML page ---
+dash.DASHBOARD_USERNAME = "admin"
+dash.DASHBOARD_PASSWORD = "secret123"
+with mock.patch.object(dash.subprocess, "run", side_effect=fake_run_active):
+    resp_no_auth = client.get("/api/status")
+    assert resp_no_auth.status_code == 401
+
+    creds = base64.b64encode(b"admin:secret123").decode()
+    resp_good = client.get("/api/status", headers={"Authorization": f"Basic {creds}"})
+    assert resp_good.status_code == 200
+dash.DASHBOARD_USERNAME = ""
+dash.DASHBOARD_PASSWORD = ""
+print("PASS: /api/status respects HTTP Basic Auth the same as the HTML dashboard")
+
+# --- Test 15: /api/status handles a missing database gracefully (fresh install) ---
+os.remove(os.environ["DB_PATH"])
+with mock.patch.object(dash.subprocess, "run", side_effect=fake_run_active):
+    resp = client.get("/api/status")
+assert resp.status_code == 200
+data = resp.get_json()
+assert data["uploaded"] == 0
+assert data["pending"] == 0
+assert data["gb_stored"] == 0
+print("PASS: /api/status returns sensible zeroed-out values when no database exists yet")
+
 print("\nAll status_dashboard tests passed.")

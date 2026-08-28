@@ -29,7 +29,7 @@ import time
 from functools import wraps
 
 from dotenv import load_dotenv
-from flask import Flask, Response, request, send_file
+from flask import Flask, Response, jsonify, request, send_file
 
 load_dotenv()
 
@@ -231,9 +231,54 @@ def index():
 
 <h2>Logs</h2>
 <p><a class="btn" href="/logs/download">Download full log file</a></p>
+
+<h2>API</h2>
+<p class="muted">Machine-readable status at <code>/api/status</code> - built for Home Assistant's <code>rest:</code> integration (see README), but it's plain JSON so anything can poll it.</p>
+
 <p class="muted">Page auto-refreshes every 30 seconds.</p>
 </body></html>
 """
+
+
+@app.route("/api/status")
+@requires_auth
+def api_status():
+    """Machine-readable status for external tools - built specifically to
+    be easy to consume from Home Assistant's `rest:` integration, but it's
+    plain JSON so anything can poll it. One request here covers everything
+    (state, counts, storage, retention config) rather than needing several
+    separate calls."""
+    state, detail = get_service_status()
+    stats = get_stats()
+
+    heartbeat_age = None
+    if os.path.exists(HEARTBEAT_FILE):
+        try:
+            with open(HEARTBEAT_FILE) as f:
+                heartbeat_age = round(time.time() - float(f.read().strip()), 1)
+        except Exception:
+            pass
+
+    totals = stats["totals"] if stats else {}
+    bytes_stored = totals.get("bytes_stored") or 0
+
+    return jsonify({
+        "state": state,  # "ok" | "warn" | "fail"
+        "detail": detail,
+        "heartbeat_age_seconds": heartbeat_age,
+        "uploaded": totals.get("uploaded") or 0,
+        "pending": totals.get("pending") or 0,
+        "given_up": totals.get("given_up") or 0,
+        "retained": totals.get("retained") or 0,
+        "retention_deleted": totals.get("retention_deleted") or 0,
+        "bytes_stored": bytes_stored,
+        "gb_stored": round(bytes_stored / (1024 ** 3), 3),
+        "retention_enabled": bool(DRIVE_RETENTION_MAX_AGE_DAYS or DRIVE_RETENTION_MAX_SIZE_GB),
+        "retention_max_age_days": DRIVE_RETENTION_MAX_AGE_DAYS,
+        "retention_max_size_gb": DRIVE_RETENTION_MAX_SIZE_GB,
+        "retention_dry_run": DRIVE_RETENTION_DRY_RUN,
+        "timestamp": time.time(),
+    })
 
 
 @app.route("/logs/download")

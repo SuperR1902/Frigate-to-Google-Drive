@@ -430,6 +430,77 @@ It auto-refreshes every 30 seconds. It's read-only (no write actions available) 
 
 If it's ever missing after an install (e.g. you're on an older repo checkout that predates this feature), the install script logs nothing about it and the main service works exactly as before — the dashboard is optional and non-blocking.
 
+## Home Assistant integration
+
+The dashboard exposes a JSON endpoint at `/api/status`, built specifically to plug into Home Assistant's `rest:` integration — one HTTP request feeding several sensors, refreshed on whatever interval you choose. Example response:
+```json
+{
+  "state": "ok",
+  "detail": "active, last heartbeat 4s ago (systemd: active)",
+  "heartbeat_age_seconds": 4.2,
+  "uploaded": 189,
+  "pending": 0,
+  "given_up": 11,
+  "retained": 189,
+  "bytes_stored": 943718400,
+  "gb_stored": 0.879,
+  "retention_enabled": false,
+  "retention_max_age_days": 0,
+  "retention_max_size_gb": 0,
+  "retention_dry_run": false,
+  "timestamp": 1787950000.12
+}
+```
+
+**Add this to Home Assistant's `configuration.yaml`** (replace `192.168.1.50` with your container's actual IP):
+```yaml
+rest:
+  - resource: http://192.168.1.50:8080/api/status
+    scan_interval: 60
+    sensor:
+      - name: "Frigate Uploader Status"
+        value_template: "{{ value_json.state }}"
+      - name: "Frigate Uploader Uploaded Count"
+        value_template: "{{ value_json.uploaded }}"
+        state_class: total_increasing
+      - name: "Frigate Uploader Pending Count"
+        value_template: "{{ value_json.pending }}"
+      - name: "Frigate Uploader Storage Used"
+        value_template: "{{ value_json.gb_stored }}"
+        unit_of_measurement: "GB"
+        state_class: measurement
+    binary_sensor:
+      - name: "Frigate Uploader Problem"
+        device_class: problem
+        value_template: "{{ value_json.state != 'ok' }}"
+```
+
+**If you set `DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`** in `.env`, add authentication to the same `rest:` block:
+```yaml
+rest:
+  - resource: http://192.168.1.50:8080/api/status
+    authentication: basic
+    username: "your_dashboard_username"
+    password: "your_dashboard_password"
+    scan_interval: 60
+    sensor:
+      # ...same as above
+```
+
+**A simple Lovelace card** using the entities above:
+```yaml
+type: entities
+title: Frigate Uploader
+entities:
+  - entity: sensor.frigate_uploader_status
+  - entity: binary_sensor.frigate_uploader_problem
+  - entity: sensor.frigate_uploader_uploaded_count
+  - entity: sensor.frigate_uploader_pending_count
+  - entity: sensor.frigate_uploader_storage_used
+```
+
+The `binary_sensor.frigate_uploader_problem` entity (device class `problem`) is what you'd want to add to an existing "Problems" or alerts dashboard/automation — it turns `on` whenever `state` isn't `"ok"` (covers both `warn` and `fail`), so a single automation trigger on that entity covers "something needs attention" without needing to parse the text state yourself.
+
 ## Drive retention (optional, off by default)
 
 Automatically deletes uploaded files from Drive once they're older than a set number of days and/or once total tracked storage exceeds a size cap (oldest files deleted first). Both settings default to `0` (disabled) — this is a destructive feature and requires explicit opt-in.

@@ -3,6 +3,28 @@
 Every entry here was a real failure hit during actual setup, not a
 theoretical fix. Kept for anyone maintaining or extending this project.
 
+## Added a JSON status API for Home Assistant integration
+**What was added:** a new `/api/status` endpoint on the status dashboard,
+returning the same health/upload/retention data the HTML dashboard shows,
+as plain JSON. Built specifically around Home Assistant's `rest:`
+integration (verified against Home Assistant's current documented
+config format), which lets multiple sensors share a single HTTP request
+rather than each sensor polling separately. Respects the same optional
+HTTP Basic Auth as the rest of the dashboard.
+
+README includes a ready-to-adapt `configuration.yaml` snippet (sensors +
+a `binary_sensor` with `device_class: problem` that's `on` whenever
+`state != "ok"`, useful as a single trigger for "something needs
+attention" automations) and a matching Lovelace entities card example.
+
+Tested: correct JSON shape and values against a real database (including
+the distinction between "uploaded" - total ever uploaded - and
+"retained" - currently still on Drive, post-retention), retention config
+fields reflecting live settings, Basic Auth enforcement matching the HTML
+page, and graceful zeroed-out output when no database exists yet (fresh
+install). Also smoke-tested against a live running server, not just
+Flask's test client.
+
 ## Added status dashboard, log rotation, and Drive retention
 **What was added:**
 - **Status dashboard** (`status_dashboard.py`) — a small read-only Flask
