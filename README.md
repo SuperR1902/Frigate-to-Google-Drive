@@ -579,6 +579,15 @@ majority of first-time setup issues (bad Frigate URL/port, missing
 credentials, wrong Drive folder ID, invalid timezone) in one command,
 before anything even tries to run.
 
+**`--check` reports timezone/credentials wrong, but the running service works fine**
+→ Fixed as of this version — earlier, running `main.py`/`--check` via a
+bare `pct exec` (without first `cd`-ing into the app directory) could
+report incorrect results, because relative paths and an ambient `TZ`
+environment variable were resolving differently than they do for the
+systemd service. Both `main.py` and `status_dashboard.py` now anchor
+themselves to their own directory automatically, so this works correctly
+from any invocation method or working directory.
+
 **Dashboard shows "Not running" but I just started the service**
 → Give it one full poll cycle first (`POLL_INTERVAL_SECONDS`, default
 30s) — the "Running" badge needs at least one successful heartbeat

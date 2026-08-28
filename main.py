@@ -31,7 +31,25 @@ from google.oauth2.credentials import Credentials as UserCredentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-load_dotenv()
+# Anchor to this script's own directory regardless of the caller's current
+# working directory. Without this, relative paths in .env (DB_PATH,
+# OAUTH_TOKEN_FILE, etc.) only resolve correctly when something has
+# already cd'd here first - true for the systemd service (WorkingDirectory=
+# does this for us), but NOT true for a manual
+# `pct exec <ctid> -- .../python3 /opt/.../main.py --check` invocation,
+# where the working directory is whatever pct exec happens to start in
+# (often /root). Confirmed via direct reproduction: the same relative
+# path resolves correctly from one CWD and incorrectly from another.
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+# override=True: without this, an ambient environment variable that
+# happens to already be set (before .env is even read) silently wins over
+# the .env file's value - load_dotenv() defaults to NOT overriding
+# existing variables. TZ is a common real-world case: some systems/login
+# environments already export TZ, which would otherwise silently override
+# .env's TZ setting even though .env is supposed to be authoritative for
+# this app's configuration. Confirmed via direct reproduction.
+load_dotenv(override=True)
 
 # --------------------------------------------------------------------------
 # Configuration (all via environment variables / .env)

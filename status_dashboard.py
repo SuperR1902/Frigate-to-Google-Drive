@@ -6,7 +6,9 @@ Runs continuously inside the same container as the uploader service.
 Shows service health, upload statistics, recent activity, retention
 config, and lets you download the log file for troubleshooting.
 
-Reads the same .env as main.py, so run this from the same directory.
+Reads the same .env as main.py - resolved relative to this script's own
+location, so it works correctly even if invoked from a different working
+directory (e.g. a manual `pct exec ... python3 /opt/.../status_dashboard.py`).
 
 Usage:
     pip install -r requirements.txt   # flask is included there
@@ -31,7 +33,14 @@ from functools import wraps
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, request, send_file
 
-load_dotenv()
+# Same reasoning as main.py: anchor to this script's own directory so
+# relative paths (DB_PATH, LOG_FILE, HEARTBEAT_FILE) resolve correctly
+# regardless of the caller's CWD, and load .env with override=True so it
+# stays authoritative over any ambient environment variable of the same
+# name (TZ being the most common real-world case).
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+load_dotenv(override=True)
 
 
 def env(name, default=None, cast=str):

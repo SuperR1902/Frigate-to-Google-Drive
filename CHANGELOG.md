@@ -3,6 +3,49 @@
 Every entry here was a real failure hit during actual setup, not a
 theoretical fix. Kept for anyone maintaining or extending this project.
 
+## Fixed: `--check` (and manual invocation generally) failed outside the app directory
+**Symptom:** running `python3 main.py --check` via a bare
+`pct exec <ctid> -- .../python3 /opt/.../main.py --check` (i.e. without
+first `cd`-ing into the app directory) reported the timezone as
+defaulting to UTC and the credentials file as missing - even though both
+were correctly configured and the actual service was running fine.
+
+**Cause 1 - ambient `TZ` wins over `.env`:** `load_dotenv()` defaults to
+*not* overriding environment variables that are already set. `TZ` is
+commonly pre-set in login/PAM environments (and this project itself
+installs the `tzdata` package during setup), so an ambient `TZ` value
+silently overrode `.env`'s `TZ` setting despite `.env` being supposed to
+be authoritative for this app's configuration. Reproduced directly:
+setting `TZ=Etc/UTC` in the calling shell before import caused the
+resolved timezone to stay `Etc/UTC` even with a completely different
+value in `.env`.
+
+**Cause 2 - relative paths resolve against the caller's CWD, not the
+app's directory:** `DB_PATH`, `OAUTH_TOKEN_FILE`, `SERVICE_ACCOUNT_FILE`,
+etc. are relative paths in `.env` (e.g. `credentials/oauth_token.json`).
+The systemd service works correctly because its `WorkingDirectory=`
+setting happens to put the process in the right directory - but a manual
+invocation via an absolute script path has no such guarantee, and
+Python resolves relative paths against `os.getcwd()`, not against where
+the script itself lives. Reproduced directly: the identical relative
+path existed and resolved correctly from one working directory, and
+incorrectly (file "not found") from another.
+
+**Fix:** `main.py` and `status_dashboard.py` now both call
+`os.chdir(os.path.dirname(os.path.abspath(__file__)))` immediately at
+import time, and load `.env` with `load_dotenv(override=True)`. Together
+these make relative-path resolution and configuration loading behave
+identically regardless of how or from where the script is invoked -
+matching what the systemd service already got "for free" from
+`WorkingDirectory=`. Verified with an explicit reproduction combining
+both conditions at once (ambient `TZ` set + wrong CWD + absolute script
+path), confirming the exact reported failure and its fix.
+
+**Note:** `oauth_setup_wizard.py` deliberately does *not* get the `chdir`
+fix - it's designed to be run from wherever the user chooses, with its
+output files (`.env`, `oauth_token.json`) landing in that same location,
+so forcing its working directory would change where those files appear.
+
 ## Added a `--check` configuration validation mode
 **Problem:** every real setup issue during this project's development
 (bad Frigate port, invalid timezone, wrong OAuth client type, missing
