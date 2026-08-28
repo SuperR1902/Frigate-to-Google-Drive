@@ -299,9 +299,10 @@ Finish setup:
        DRIVE_ROOT_FOLDER_ID=<your Drive folder ID>
        DRIVE_AUTH_MODE=oauth_user   (personal Gmail) or service_account (Workspace)
 
-  3. Confirm Frigate's port 5000 is actually reachable before starting:
-       curl -v http://<your-frigate-ip>:5000/api/events
-     If this fails with "Connection refused," your Frigate setup likely
+  3. Verify everything before starting (checks Frigate connectivity,
+     Drive credentials, folder access, and timezone in one command):
+       pct exec $CTID -- $APP_DIR/venv/bin/python3 $APP_DIR/main.py --check
+     If Frigate shows "Connection refused," your Frigate setup likely
      only publishes port 8971 - see README, "Before you start," item 2.
 
   4. Start it:

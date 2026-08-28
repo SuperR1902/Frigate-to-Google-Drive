@@ -547,6 +547,108 @@ def write_heartbeat():
     except Exception as e:
         log.warning("Failed to write heartbeat file: %s", e)
 
+# --------------------------------------------------------------------------
+# --check mode: validate configuration and connectivity, then exit
+# --------------------------------------------------------------------------
+
+def run_checks():
+    """Runs every check that would otherwise only surface as a confusing
+    runtime error once the service is already 'running'. Returns a list of
+    {name, ok, message} dicts. Designed to be safe to run repeatedly and to
+    never itself crash - a check that raises is caught and reported as a
+    failure for that check specifically."""
+    results = []
+
+    def add(name, ok, message):
+        results.append({"name": name, "ok": ok, "message": message})
+
+    # 1. Required config
+    if DRIVE_ROOT_FOLDER_ID:
+        add("DRIVE_ROOT_FOLDER_ID", True, "set")
+    else:
+        add("DRIVE_ROOT_FOLDER_ID", False, "not set - required")
+
+    # 2. Timezone
+    if LOCAL_TZ is None:
+        add("Timezone", False, f"TZ={TZ_NAME!r} is not a valid IANA timezone name")
+    elif TZ_NAME == "UTC":
+        add("Timezone", True, "defaults to UTC (not explicitly set in .env) - filenames will use UTC, not your local time")
+    else:
+        add("Timezone", True, f"'{TZ_NAME}' is valid")
+
+    # 3. Credentials file present
+    cred_file = OAUTH_TOKEN_FILE if DRIVE_AUTH_MODE == "oauth_user" else SERVICE_ACCOUNT_FILE
+    cred_exists = os.path.exists(cred_file)
+    if cred_exists:
+        add("Credentials file", True, f"found at {cred_file} (mode: {DRIVE_AUTH_MODE})")
+    else:
+        add("Credentials file", False, f"not found at {cred_file} (mode: {DRIVE_AUTH_MODE})")
+
+    # 4. Frigate reachability - the single most common first-time failure
+    try:
+        resp = requests.get(f"{FRIGATE_URL}/api/events", params={"limit": 1}, timeout=10)
+        if resp.status_code == 200:
+            add("Frigate connection", True, f"reachable at {FRIGATE_URL}")
+        else:
+            add("Frigate connection", False, f"HTTP {resp.status_code} from {FRIGATE_URL}")
+    except requests.exceptions.ConnectionError:
+        add(
+            "Frigate connection", False,
+            f"connection refused at {FRIGATE_URL} - many Frigate setups only "
+            "publish port 8971 (authenticated), not 5000 (plain API, which "
+            "this tool needs) - see README, 'Before you start'",
+        )
+    except Exception as e:
+        add("Frigate connection", False, str(e))
+
+    # 5 & 6: Drive auth + folder access - only attempted if credentials exist,
+    # to avoid a cascade of confusing secondary errors when the real problem
+    # is simply a missing file.
+    if cred_exists:
+        try:
+            service = get_drive_service()
+            about = service.about().get(fields="user").execute()
+            email = about.get("user", {}).get("emailAddress", "unknown")
+            add("Drive authentication", True, f"valid (as {email})")
+
+            if DRIVE_ROOT_FOLDER_ID:
+                try:
+                    result = service.files().get(
+                        fileId=DRIVE_ROOT_FOLDER_ID, fields="id,name,mimeType", supportsAllDrives=True
+                    ).execute()
+                    if result.get("mimeType") == "application/vnd.google-apps.folder":
+                        add("Drive folder access", True, f"accessible: '{result.get('name')}'")
+                    else:
+                        add("Drive folder access", False, f"that ID is a {result.get('mimeType')}, not a folder")
+                except Exception as e:
+                    add("Drive folder access", False, f"could not access folder {DRIVE_ROOT_FOLDER_ID}: {e}")
+            else:
+                add("Drive folder access", False, "skipped - DRIVE_ROOT_FOLDER_ID not set")
+        except Exception as e:
+            add("Drive authentication", False, str(e))
+            add("Drive folder access", False, "skipped - authentication failed")
+    else:
+        add("Drive authentication", False, "skipped - credentials file missing")
+        add("Drive folder access", False, "skipped - credentials file missing")
+
+    return results
+
+
+def print_check_report(results):
+    print()
+    print("Frigate -> Google Drive uploader: configuration check")
+    print("=" * 62)
+    all_ok = True
+    for r in results:
+        symbol = "\u2713" if r["ok"] else "\u2717"
+        print(f"{symbol} {r['name']}: {r['message']}")
+        if not r["ok"]:
+            all_ok = False
+    print("=" * 62)
+    print("All checks passed." if all_ok else "Some checks failed - see above.")
+    print()
+    return all_ok
+
 
 def main():
     if not DRIVE_ROOT_FOLDER_ID:
@@ -609,4 +711,16 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description="Frigate -> Google Drive uploader")
+    parser.add_argument(
+        "--check", action="store_true",
+        help="Validate configuration and connectivity (Frigate, Drive auth, folder access), then exit without starting the upload loop.",
+    )
+    args = parser.parse_args()
+
+    if args.check:
+        ok = print_check_report(run_checks())
+        sys.exit(0 if ok else 1)
+    else:
+        main()

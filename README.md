@@ -320,6 +320,12 @@ pct exec <CTID> -- nano /opt/frigate-gdrive-uploader/.env
 At minimum set `FRIGATE_URL`, `DRIVE_ROOT_FOLDER_ID`, and `DRIVE_AUTH_MODE`
 (plus `OAUTH_TOKEN_FILE` or `SERVICE_ACCOUNT_FILE` to match).
 
+**Verify everything before starting** (catches most setup mistakes in
+one command — see "Configuration check" below for full details):
+```bash
+pct exec <CTID> -- /opt/frigate-gdrive-uploader/venv/bin/python3 /opt/frigate-gdrive-uploader/main.py --check
+```
+
 **Start it:**
 ```bash
 pct exec <CTID> -- systemctl start frigate-gdrive-uploader
@@ -530,7 +536,48 @@ docker logs -f frigate-gdrive-uploader
 
 ---
 
+## Configuration check (`--check` mode)
+
+Run this **before** starting the service (or any time something seems
+wrong) to validate everything in one shot, instead of discovering
+problems one at a time through logs:
+```bash
+pct exec <CTID> -- /opt/frigate-gdrive-uploader/venv/bin/python3 /opt/frigate-gdrive-uploader/main.py --check
+```
+Example output:
+```
+Frigate -> Google Drive uploader: configuration check
+==============================================================
+✓ DRIVE_ROOT_FOLDER_ID: set
+✓ Timezone: 'Europe/Amsterdam' is valid
+✓ Credentials file: found at credentials/oauth_token.json (mode: oauth_user)
+✓ Frigate connection: reachable at http://192.168.1.10:5000
+✓ Drive authentication: valid (as you@gmail.com)
+✓ Drive folder access: accessible: 'Frigate Backups'
+==============================================================
+All checks passed.
+```
+It checks, in order: required config is set, the timezone name is valid,
+the credentials file for your `DRIVE_AUTH_MODE` exists, Frigate is
+actually reachable (with the specific 8971-vs-5000 hint if it isn't),
+Drive authentication actually works, and the configured folder is
+actually accessible and is a folder (not some other file type). Exits
+with code `0` if everything passes, `1` if anything fails — safe to use
+in your own scripts or health checks too.
+
+If credentials are missing, the Drive checks are skipped entirely rather
+than attempted — a missing file produces one clear failure instead of a
+confusing cascade of unrelated-looking errors.
+
+---
+
 ## Troubleshooting
+
+**Something isn't working and you're not sure where to start**
+→ Run `main.py --check` (see above) first — it catches the large
+majority of first-time setup issues (bad Frigate URL/port, missing
+credentials, wrong Drive folder ID, invalid timezone) in one command,
+before anything even tries to run.
 
 **Dashboard shows "Not running" but I just started the service**
 → Give it one full poll cycle first (`POLL_INTERVAL_SECONDS`, default

@@ -3,6 +3,35 @@
 Every entry here was a real failure hit during actual setup, not a
 theoretical fix. Kept for anyone maintaining or extending this project.
 
+## Added a `--check` configuration validation mode
+**Problem:** every real setup issue during this project's development
+(bad Frigate port, invalid timezone, wrong OAuth client type, missing
+Drive folder access) only surfaced as a runtime error once the service
+was already "running" - requiring a trip through the logs to even find
+the actual problem, one issue at a time.
+
+**What was added:** `python3 main.py --check` validates configuration
+and connectivity up front, without starting the upload loop: required
+config present, timezone validity, credentials file existence, Frigate
+reachability (with the specific 8971-vs-5000 port hint on connection
+refused), Drive authentication, and Drive folder accessibility (and that
+it's actually a folder, not some other file type) - all in one command,
+printed as a clear pass/fail report. Exits `0`/`1` so it's usable in
+scripts or automation too.
+
+Dependent checks are skipped cleanly rather than cascading - e.g. if the
+credentials file is missing, Drive authentication and folder access are
+both reported as "skipped," not as confusing secondary failures that
+look unrelated to the real (single) root cause.
+
+Wired into both the install script's final instructions and the README
+as the first troubleshooting step. Tested with 12 dedicated test cases
+covering every pass/fail path (missing config, invalid timezone, missing
+credentials, Frigate unreachable, Drive auth failure, non-folder IDs,
+and the full happy path), plus a real subprocess invocation against a
+live mock Frigate server to confirm the actual CLI behavior and exit
+codes, not just the underlying function calls.
+
 ## Added a JSON status API for Home Assistant integration
 **What was added:** a new `/api/status` endpoint on the status dashboard,
 returning the same health/upload/retention data the HTML dashboard shows,
