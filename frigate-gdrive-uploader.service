@@ -1,0 +1,17 @@
+[Unit]
+Description=Frigate to Google Drive uploader
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=frigate-uploader
+WorkingDirectory=/opt/frigate-gdrive-uploader
+ExecStart=/opt/frigate-gdrive-uploader/venv/bin/python3 /opt/frigate-gdrive-uploader/main.py
+Restart=on-failure
+RestartSec=15
+# Uncomment to load environment from .env manually instead of python-dotenv:
+# EnvironmentFile=/opt/frigate-gdrive-uploader/.env
+
+[Install]
+WantedBy=multi-user.target

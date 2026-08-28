@@ -1,0 +1,11 @@
+services:
+  frigate-gdrive-uploader:
+    build: .
+    container_name: frigate-gdrive-uploader
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./credentials:/app/credentials:ro
+      - ./db:/app/db
+      - ./logs:/app/logs

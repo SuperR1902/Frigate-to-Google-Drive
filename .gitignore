@@ -1,0 +1,9 @@
+# Never commit real secrets to this repo - it's public.
+.env
+credentials/
+db/
+tmp/
+logs/
+*.pyc
+__pycache__/
+venv/

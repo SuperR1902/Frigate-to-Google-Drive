@@ -1,0 +1,7 @@
+python-dotenv>=1.0
+tzdata>=2024.1
+requests>=2.31
+flask>=3.0
+google-api-python-client>=2.100
+google-auth>=2.23
+google-auth-httplib2>=0.1.1
