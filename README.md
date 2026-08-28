@@ -228,8 +228,8 @@ If you've pushed this code to your own repo, the Proxmox host doesn't
 need any local files at all — one command does everything:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOU/YOUR_REPO/main/create-frigate-gdrive-ct.sh \
-  | GIT_REPO_URL=https://github.com/YOU/YOUR_REPO.git bash
+curl -fsSL https://raw.githubusercontent.com/SuperR1902/Frigate-to-Google-Drive/main/create-frigate-gdrive-ct.sh \
+  | GIT_REPO_URL=https://github.com/SuperR1902/Frigate-to-Google-Drive.git bash
 ```
 
 The script fetches itself from GitHub via `curl`, then has the
@@ -239,8 +239,8 @@ from your PC to the Proxmox host manually.
 Pin a branch/tag with `GIT_REF` (default `main`). Override any other
 setting with env vars, e.g.:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOU/YOUR_REPO/main/create-frigate-gdrive-ct.sh \
-  | CTID=211 MEMORY_MB=1024 GIT_REPO_URL=https://github.com/YOU/YOUR_REPO.git bash
+curl -fsSL https://raw.githubusercontent.com/SuperR1902/Frigate-to-Google-Drive/main/create-frigate-gdrive-ct.sh \
+  | CTID=211 MEMORY_MB=1024 GIT_REPO_URL=https://github.com/SuperR1902/Frigate-to-Google-Drive.git bash
 ```
 
 | Variable | Default | Description |
@@ -267,10 +267,10 @@ stdin.
 ### Alternative: clone the repo first, run locally
 
 ```bash
-git clone https://github.com/YOU/YOUR_REPO.git
-cd YOUR_REPO
+git clone https://github.com/SuperR1902/Frigate-to-Google-Drive.git
+cd Frigate-to-Google-Drive
 chmod +x create-frigate-gdrive-ct.sh
-GIT_REPO_URL=https://github.com/YOU/YOUR_REPO.git ./create-frigate-gdrive-ct.sh
+GIT_REPO_URL=https://github.com/SuperR1902/Frigate-to-Google-Drive.git ./create-frigate-gdrive-ct.sh
 ```
 
 ### Alternative: push local files instead of using git
